@@ -35,7 +35,8 @@ async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const uids = await client.search({ uid: `${minUid + 1}:*` }, { uid: true });
+      const allUids = await client.search({ from: 'noreply@auth.ticket.com.br' }, { uid: true });
+      const uids = allUids.filter((uid) => uid > minUid);
 
       for (const uid of [...uids].reverse()) {
         const msg = await client.fetchOne(uid, { bodyParts: ['1', 'TEXT'], envelope: true }, { uid: true });
