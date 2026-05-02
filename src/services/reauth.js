@@ -64,10 +64,19 @@ async function reauth() {
     await page.waitForSelector('#signinEmailVerificationControl_but_verify_code', { timeout: 5000 });
     await page.click('#signinEmailVerificationControl_but_verify_code');
 
+    // Aguarda #continue ficar visível (após verificação bem-sucedida) e clica manualmente
+    // como fallback caso o skipSteps() do template não dispare em headless
+    try {
+      await page.waitForSelector('#continue:not(.d-none)', { timeout: 15000 });
+      await page.click('#continue');
+    } catch {
+      // skipSteps() já clicou ou o redirect aconteceu antes
+    }
+
     // Aguarda redirect para ticket.com.br com o token na URL
     await page.waitForFunction(
       (redirect) => window.location.href.startsWith(redirect),
-      { timeout: 20000 },
+      { timeout: 30000 },
       REDIRECT_URI,
     );
 
