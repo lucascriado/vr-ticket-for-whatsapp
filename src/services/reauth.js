@@ -68,7 +68,7 @@ async function reauth() {
     // como fallback caso o skipSteps() do template não dispare em headless
     try {
       await page.waitForSelector('#continue:not(.d-none)', { timeout: 15000 });
-      await page.click('#continue');
+      await page.evaluate(() => document.getElementById('continue').click());
     } catch {
       // skipSteps() já clicou ou o redirect aconteceu antes
     }
