@@ -1,9 +1,30 @@
 const { Router } = require('express');
-const { getCardBalance } = require('../services/ticket');
+const { getCardBalance, getStatement } = require('../services/ticket');
 const { sendMessage } = require('../services/evolution');
 
 const router = Router();
 const processedIds = new Set();
+
+function formatStatement(items) {
+  if (!items.length) return '*🧾 Extrato Ticket Restaurante*\n\nNenhuma movimentação encontrada.';
+
+  const lines = items.map((item) => {
+    const date = new Date(item.date);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+
+    const isCredit = item.type === 'Recharge';
+    const emoji = isCredit ? '🟢' : '🔴';
+    const sign = isCredit ? '+' : '-';
+    const abs = Math.abs(item.value ?? 0);
+    const valueStr = abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const desc = (item.description ?? '').trim();
+
+    return `${emoji} ${day}/${month} — *${sign}R$ ${valueStr}* — ${desc}`;
+  });
+
+  return `*🧾 Extrato Ticket Restaurante*\n\n${lines.join('\n')}`;
+}
 
 router.post('/', async (req, res) => {
   res.sendStatus(200);
@@ -29,7 +50,7 @@ router.post('/', async (req, res) => {
   console.log(`[Webhook] id=${messageId} from=${remoteJid} text="${text}"`);
 
   if (!remoteJid || remoteJid.endsWith('@lid')) return;
-  if (text !== '/ticket saldo') return;
+  if (text !== '/ticket saldo' && text !== '/ticket extrato') return;
 
   if (messageId) {
     if (processedIds.has(messageId)) return;
@@ -37,13 +58,26 @@ router.post('/', async (req, res) => {
     setTimeout(() => processedIds.delete(messageId), 5000);
   }
 
-  try {
-    const balance = await getCardBalance();
-    const formatted = balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    await sendMessage(remoteJid, `Saldo Ticket Restaurante: ${formatted}`);
-  } catch (err) {
-    console.error('[Webhook] Erro:', err.message);
-    try { await sendMessage(remoteJid, 'Erro ao consultar saldo. Tente novamente.'); } catch {}
+  if (text === '/ticket saldo') {
+    try {
+      const balance = await getCardBalance();
+      const formatted = balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      await sendMessage(remoteJid, `Saldo Ticket Restaurante: ${formatted}`);
+    } catch (err) {
+      console.error('[Webhook] Erro saldo:', err.message);
+      try { await sendMessage(remoteJid, 'Erro ao consultar saldo. Tente novamente.'); } catch {}
+    }
+    return;
+  }
+
+  if (text === '/ticket extrato') {
+    try {
+      const items = await getStatement(15);
+      await sendMessage(remoteJid, formatStatement(items));
+    } catch (err) {
+      console.error('[Webhook] Erro extrato:', err.message);
+      try { await sendMessage(remoteJid, 'Erro ao consultar extrato. Tente novamente.'); } catch {}
+    }
   }
 });
 
