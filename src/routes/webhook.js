@@ -15,15 +15,15 @@ function formatStatement(items) {
 
     const isCredit = item.type === 'Recharge';
     const emoji = isCredit ? '🟢' : '🔴';
-    const sign = isCredit ? '+' : '-';
     const abs = Math.abs(item.value ?? 0);
-    const valueStr = abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const valueNum = abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const valueStr = `R$ ${valueNum}`.padStart(12);
     const desc = (item.description ?? '').trim();
 
-    return `${emoji} ${day}/${month} — *${sign}R$ ${valueStr}* — ${desc}`;
+    return `${emoji} ${day}/${month}  ${valueStr}  ${desc}`;
   });
 
-  return `*🧾 Extrato Ticket Restaurante*\n\n${lines.join('\n')}`;
+  return `*🧾 Extrato Ticket Restaurante*\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
 }
 
 router.post('/', async (req, res) => {
