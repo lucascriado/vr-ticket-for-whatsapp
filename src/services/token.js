@@ -1,15 +1,34 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { reauth } = require('./reauth');
 
 const B2C_TENANT = process.env.B2C_TENANT ?? '';
 const B2C_POLICY = process.env.B2C_POLICY ?? '';
 const CLIENT_ID = process.env.B2C_CLIENT_ID ?? '';
 const REDIRECT_URI = 'https://www.ticket.com.br/portal-usuario/meus-cartoes';
 const AUTHORIZE_URL = `https://ticketmobile.b2clogin.com/${B2C_TENANT}/oauth2/v2.0/authorize`;
+const ENV_PATH = path.resolve(__dirname, '../../.env');
 
 const state = {
   accessToken: '',
   expiresAt: 0,
 };
+
+function persistEnvKey(key, value) {
+  try {
+    let content = fs.readFileSync(ENV_PATH, 'utf8');
+    const regex = new RegExp(`^${key}=.*$`, 'm');
+    if (regex.test(content)) {
+      content = content.replace(regex, `${key}=${value}`);
+    } else {
+      content += `\n${key}=${value}`;
+    }
+    fs.writeFileSync(ENV_PATH, content, 'utf8');
+  } catch {
+    // .env não encontrado ou sem permissão — ignora silenciosamente
+  }
+}
 
 function init() {
   state.accessToken = process.env.TICKET_ACCESS_TOKEN ?? '';
@@ -58,19 +77,47 @@ async function silentRenewal() {
   state.accessToken = idToken;
   state.expiresAt = payload.exp;
 
+  persistEnvKey('TICKET_ACCESS_TOKEN', idToken);
+  persistEnvKey('TICKET_TOKEN_EXPIRES_AT', payload.exp);
+
   console.log(`[TokenService] Token renovado. Expira em ${new Date(payload.exp * 1000).toISOString()}`);
 
   const setCookie = response.headers['set-cookie'];
   if (setCookie) {
     const ssoCookie = setCookie.find((c) => c.includes('x-ms-cpim-sso'));
     if (ssoCookie) {
-      process.env.B2C_SSO_COOKIE = ssoCookie.split(';')[0] ?? process.env.B2C_SSO_COOKIE;
+      const cookieValue = ssoCookie.split(';')[0] ?? process.env.B2C_SSO_COOKIE;
+      process.env.B2C_SSO_COOKIE = cookieValue;
+      persistEnvKey('B2C_SSO_COOKIE', cookieValue);
     }
   }
 }
 
 async function getAccessToken() {
-  if (isExpiringSoon()) await silentRenewal();
+  if (!isExpiringSoon()) return state.accessToken;
+
+  try {
+    await silentRenewal();
+  } catch (err) {
+    if (!err.message.includes('interaction_required')) throw err;
+
+    console.log('[TokenService] interaction_required — iniciando reauth automático...');
+    const { idToken, ssoCookie } = await reauth();
+
+    const rawPayload = idToken.split('.')[1] ?? '';
+    const payload = JSON.parse(Buffer.from(rawPayload, 'base64url').toString());
+
+    state.accessToken = idToken;
+    state.expiresAt = payload.exp;
+    persistEnvKey('TICKET_ACCESS_TOKEN', idToken);
+    persistEnvKey('TICKET_TOKEN_EXPIRES_AT', payload.exp);
+
+    if (ssoCookie) {
+      process.env.B2C_SSO_COOKIE = ssoCookie;
+      persistEnvKey('B2C_SSO_COOKIE', ssoCookie);
+    }
+  }
+
   return state.accessToken;
 }
 
