@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-const { fetchVerificationCode } = require('./gmail');
+const { getLastUid, fetchVerificationCode } = require('./gmail');
 
 const REDIRECT_URI = 'https://www.ticket.com.br/portal-usuario/meus-cartoes';
 const B2C_TENANT = process.env.B2C_TENANT ?? '';
@@ -47,7 +47,7 @@ async function reauth() {
 
     // Aguarda os botões de MFA aparecerem e chama setEmailMFA() diretamente
     await page.waitForSelector('#mfa-option-email:not(.d-none)', { timeout: 15000 });
-    const mfaRequestedAt = new Date();
+    const lastUid = await getLastUid();
     await page.evaluate(() => setEmailMFA());
     console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
 
@@ -55,7 +55,7 @@ async function reauth() {
     await page.waitForSelector('#VerificationCode', { timeout: 30000 });
 
     // Lê o código no Gmail buscando só emails chegados após o pedido de MFA
-    const code = await fetchVerificationCode(mfaRequestedAt);
+    const code = await fetchVerificationCode(lastUid);
     console.log(`[Reauth] Código recebido: ${code}`);
 
     await page.type('#VerificationCode', code);

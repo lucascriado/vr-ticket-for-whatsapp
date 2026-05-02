@@ -1,7 +1,7 @@
 const { ImapFlow } = require('imapflow');
 
-async function fetchVerificationCode(since = new Date(Date.now() - 60 * 1000), timeoutMs = 90000) {
-  const client = new ImapFlow({
+function makeClient() {
+  return new ImapFlow({
     host: 'imap.gmail.com',
     port: 993,
     secure: true,
@@ -11,7 +11,23 @@ async function fetchVerificationCode(since = new Date(Date.now() - 60 * 1000), t
     },
     logger: false,
   });
+}
 
+async function getLastUid() {
+  const client = makeClient();
+  await client.connect();
+  const lock = await client.getMailboxLock('INBOX');
+  try {
+    const status = await client.status('INBOX', { uidNext: true });
+    return (status.uidNext ?? 1) - 1;
+  } finally {
+    lock.release();
+    await client.logout();
+  }
+}
+
+async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
+  const client = makeClient();
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
 
@@ -19,7 +35,7 @@ async function fetchVerificationCode(since = new Date(Date.now() - 60 * 1000), t
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const uids = await client.search({ since }, { uid: true });
+      const uids = await client.search({ uid: `${minUid + 1}:*` }, { uid: true });
 
       for (const uid of [...uids].reverse()) {
         const msg = await client.fetchOne(uid, { bodyParts: ['1', 'TEXT'], envelope: true }, { uid: true });
@@ -31,7 +47,6 @@ async function fetchVerificationCode(since = new Date(Date.now() - 60 * 1000), t
           msg.bodyParts?.get('TEXT')?.toString('utf8') ??
           '';
 
-        // Decodifica quoted-printable e strip HTML
         const decoded = raw
           .replace(/=\r?\n/g, '')
           .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
@@ -51,4 +66,4 @@ async function fetchVerificationCode(since = new Date(Date.now() - 60 * 1000), t
   }
 }
 
-module.exports = { fetchVerificationCode };
+module.exports = { getLastUid, fetchVerificationCode };
