@@ -1,4 +1,4 @@
-# ticket2zap
+# ticket2whatsapp
 
 Consulte o saldo e extrato do seu **Ticket Restaurante** direto pelo WhatsApp — sem abrir app, sem esperar carregar, sem frescura.
 
