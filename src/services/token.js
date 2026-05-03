@@ -121,4 +121,24 @@ async function getAccessToken() {
   return state.accessToken;
 }
 
-module.exports = { init, isExpiringSoon, silentRenewal, getAccessToken };
+async function forceReauth() {
+  console.log('[TokenService] Iniciando reauth forçado...');
+  const { idToken, ssoCookie } = await reauth();
+
+  const rawPayload = idToken.split('.')[1] ?? '';
+  const payload = JSON.parse(Buffer.from(rawPayload, 'base64url').toString());
+
+  state.accessToken = idToken;
+  state.expiresAt = payload.exp;
+  persistEnvKey('TICKET_ACCESS_TOKEN', idToken);
+  persistEnvKey('TICKET_TOKEN_EXPIRES_AT', payload.exp);
+
+  if (ssoCookie) {
+    process.env.B2C_SSO_COOKIE = ssoCookie;
+    persistEnvKey('B2C_SSO_COOKIE', ssoCookie);
+  }
+
+  console.log(`[TokenService] Reauth concluído. Expira em ${new Date(payload.exp * 1000).toISOString()}`);
+}
+
+module.exports = { init, isExpiringSoon, silentRenewal, getAccessToken, forceReauth };
