@@ -58,13 +58,19 @@ async function reauth() {
 
     if (mfaOptionVisible) {
       await page.click('#mfa-option-email');
+      // aguarda a página processar o pedido de envio do código por e-mail
+      await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
     } else {
       console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');
     }
 
     // Aguarda o campo do código aparecer (se ainda não estiver visível)
-    await page.waitForSelector('#VerificationCode', { timeout: 30000 });
+    await page.waitForSelector('#VerificationCode', { timeout: 60000 }).catch(async (err) => {
+      await page.screenshot({ path: '/tmp/reauth-verification.png', fullPage: true });
+      console.error('[Reauth] #VerificationCode não apareceu — screenshot em /tmp/reauth-verification.png');
+      throw err;
+    });
 
     // Lê o código no Gmail buscando só emails chegados após o pedido de MFA
     const code = await fetchVerificationCode(lastUid);
