@@ -45,10 +45,13 @@ async function reauth() {
     await page.waitForSelector('#next', { timeout: 10000 });
     await page.click('#next');
 
-    // Aguarda ou o botão de seleção de MFA ou o campo de código direto
+    // Aguarda ou o botão de seleção de MFA (por texto) ou o campo de código direto
     const lastUid = await getLastUid();
     const mfaOptionVisible = await Promise.race([
-      page.waitForSelector('#mfa-option-email:not(.d-none)', { timeout: 15000 }).then(() => true),
+      page.waitForFunction(
+        () => Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim().includes('Por e-mail')),
+        { timeout: 15000 },
+      ).then(() => true),
       page.waitForSelector('#VerificationCode', { timeout: 15000 }).then(() => false),
     ]).catch(async () => {
       await page.screenshot({ path: '/tmp/reauth-debug.png', fullPage: true });
@@ -57,7 +60,10 @@ async function reauth() {
     });
 
     if (mfaOptionVisible) {
-      await page.click('#mfa-option-email');
+      await page.evaluate(() => {
+        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail'));
+        btn?.click();
+      });
       // aguarda a página processar o pedido de envio do código por e-mail
       await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
