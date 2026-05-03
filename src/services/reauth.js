@@ -60,12 +60,13 @@ async function reauth() {
     });
 
     if (mfaOptionVisible) {
-      await page.evaluate(() => {
-        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail'));
-        btn?.click();
-      });
+      const emailBtn = await page.evaluateHandle(
+        () => Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail')),
+      );
+      await emailBtn.asElement()?.click();
       // aguarda a página processar o pedido de envio do código por e-mail
       await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
+      await page.screenshot({ path: '/tmp/reauth-after-email-btn.png', fullPage: true });
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
     } else {
       console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');

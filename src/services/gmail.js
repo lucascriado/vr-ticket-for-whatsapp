@@ -37,9 +37,9 @@ async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
     let iteration = 0;
     while (Date.now() < deadline) {
       iteration++;
-      const allUids = await client.search({ from: 'noreply@auth.ticket.com.br' }, { uid: true });
+      const allUids = await client.search({}, { uid: true });
       const uids = allUids.filter((uid) => uid > minUid);
-      console.log(`[Gmail] iter=${iteration} minUid=${minUid} encontrados=${allUids.length} novos=${uids.length} uids=[${uids.join(',')}]`);
+      console.log(`[Gmail] iter=${iteration} minUid=${minUid} total=${allUids.length} novos=${uids.length} uids=[${uids.join(',')}]`);
 
       for (const uid of uids) {
         const msg = await client.fetchOne(uid, { bodyParts: ['1', 'TEXT'], envelope: true }, { uid: true });
