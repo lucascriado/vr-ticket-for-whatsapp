@@ -1,5 +1,9 @@
+const os = require('os');
+const path = require('path');
 const puppeteer = require('puppeteer');
 const { getLastUid, fetchVerificationCode } = require('./gmail');
+
+const tmp = (name) => path.join(os.tmpdir(), name);
 
 const REDIRECT_URI = 'https://www.ticket.com.br/portal-usuario/meus-cartoes';
 const B2C_TENANT = process.env.B2C_TENANT ?? '';
@@ -54,19 +58,19 @@ async function reauth() {
       ).then(() => true),
       page.waitForSelector('#VerificationCode', { timeout: 15000 }).then(() => false),
     ]).catch(async () => {
-      await page.screenshot({ path: '/tmp/reauth-debug.png', fullPage: true });
+      await page.screenshot({ path: tmp('reauth-debug.png'), fullPage: true });
       console.error('[Reauth] Nenhum seletor de MFA encontrado — screenshot salvo em /tmp/reauth-debug.png');
       throw new Error('Página de MFA não reconhecida');
     });
 
     if (mfaOptionVisible) {
-      const emailBtn = await page.evaluateHandle(
-        () => Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail')),
-      );
-      await emailBtn.asElement()?.click();
+      await page.evaluate(() => {
+        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail'));
+        btn?.click();
+      });
       // aguarda a página processar o pedido de envio do código por e-mail
       await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
-      await page.screenshot({ path: '/tmp/reauth-after-email-btn.png', fullPage: true });
+      await new Promise(r => setTimeout(r, 2000));
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
     } else {
       console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');
@@ -74,7 +78,7 @@ async function reauth() {
 
     // Aguarda o campo do código aparecer (se ainda não estiver visível)
     await page.waitForSelector('#VerificationCode', { timeout: 60000 }).catch(async (err) => {
-      await page.screenshot({ path: '/tmp/reauth-verification.png', fullPage: true });
+      await page.screenshot({ path: tmp('reauth-verification.png'), fullPage: true });
       console.error('[Reauth] #VerificationCode não apareceu — screenshot em /tmp/reauth-verification.png');
       throw err;
     });
