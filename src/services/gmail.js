@@ -34,14 +34,21 @@ async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
   try {
     const deadline = Date.now() + timeoutMs;
 
+    let iteration = 0;
     while (Date.now() < deadline) {
+      iteration++;
       const allUids = await client.search({ from: 'noreply@auth.ticket.com.br' }, { uid: true });
       const uids = allUids.filter((uid) => uid > minUid);
+      console.log(`[Gmail] iter=${iteration} minUid=${minUid} encontrados=${allUids.length} novos=${uids.length} uids=[${uids.join(',')}]`);
 
-      for (const uid of [...uids].reverse()) {
+      for (const uid of uids) {
         const msg = await client.fetchOne(uid, { bodyParts: ['1', 'TEXT'], envelope: true }, { uid: true });
         const from = msg.envelope?.from?.[0]?.address ?? '';
-        if (!from.includes('ticket.com.br') && !from.includes('edenred.com')) continue;
+        console.log(`[Gmail] uid=${uid} from="${from}"`);
+        if (!from.includes('ticket.com.br') && !from.includes('edenred.com')) {
+          console.log(`[Gmail] uid=${uid} ignorado (remetente fora do domínio esperado)`);
+          continue;
+        }
 
         const raw =
           msg.bodyParts?.get('1')?.toString('utf8') ??
@@ -54,7 +61,11 @@ async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
         const text = decoded.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
         const match = text.match(/\b([1-9]\d{5})\b/);
-        if (match) return match[1];
+        if (match) {
+          console.log(`[Gmail] Código encontrado no uid=${uid}: ${match[1]}`);
+          return match[1];
+        }
+        console.log(`[Gmail] uid=${uid} sem código 6 dígitos no corpo`);
       }
 
       await new Promise((r) => setTimeout(r, 5000));

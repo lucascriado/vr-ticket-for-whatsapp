@@ -45,13 +45,25 @@ async function reauth() {
     await page.waitForSelector('#next', { timeout: 10000 });
     await page.click('#next');
 
-    // Aguarda os botões de MFA aparecerem e chama setEmailMFA() diretamente
-    await page.waitForSelector('#mfa-option-email:not(.d-none)', { timeout: 15000 });
+    // Aguarda ou o botão de seleção de MFA ou o campo de código direto
     const lastUid = await getLastUid();
-    await page.evaluate(() => setEmailMFA());
-    console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
+    const mfaOptionVisible = await Promise.race([
+      page.waitForSelector('#mfa-option-email:not(.d-none)', { timeout: 15000 }).then(() => true),
+      page.waitForSelector('#VerificationCode', { timeout: 15000 }).then(() => false),
+    ]).catch(async () => {
+      await page.screenshot({ path: '/tmp/reauth-debug.png', fullPage: true });
+      console.error('[Reauth] Nenhum seletor de MFA encontrado — screenshot salvo em /tmp/reauth-debug.png');
+      throw new Error('Página de MFA não reconhecida');
+    });
 
-    // Aguarda o campo do código aparecer (B2C envia o email e renderiza o input)
+    if (mfaOptionVisible) {
+      await page.evaluate(() => setEmailMFA());
+      console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
+    } else {
+      console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');
+    }
+
+    // Aguarda o campo do código aparecer (se ainda não estiver visível)
     await page.waitForSelector('#VerificationCode', { timeout: 30000 });
 
     // Lê o código no Gmail buscando só emails chegados após o pedido de MFA
