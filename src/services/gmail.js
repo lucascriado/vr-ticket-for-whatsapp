@@ -50,17 +50,25 @@ async function fetchVerificationCode(minUid = 0, timeoutMs = 90000) {
           continue;
         }
 
-        const raw =
-          msg.bodyParts?.get('1')?.toString('utf8') ??
-          msg.bodyParts?.get('TEXT')?.toString('utf8') ??
-          '';
+        const rawBuf =
+          msg.bodyParts?.get('1') ??
+          msg.bodyParts?.get('TEXT') ??
+          Buffer.alloc(0);
+
+        let raw = rawBuf.toString('utf8');
+
+        // tenta base64 primeiro; se falhar mantém o raw original
+        const b64 = raw.replace(/\s/g, '');
+        if (/^[A-Za-z0-9+/]+=*$/.test(b64) && b64.length > 20) {
+          try { raw = Buffer.from(b64, 'base64').toString('utf8'); } catch { /* mantém raw */ }
+        }
 
         const decoded = raw
           .replace(/=\r?\n/g, '')
           .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
         const text = decoded.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
-        const match = text.match(/\b([1-9]\d{5})\b/);
+        const match = text.match(/\b(\d{6})\b/);
         if (match) {
           console.log(`[Gmail] Código encontrado no uid=${uid}: ${match[1]}`);
           return match[1];

@@ -57,7 +57,7 @@ async function reauth() {
     });
 
     if (mfaOptionVisible) {
-      await page.evaluate(() => setEmailMFA());
+      await page.click('#mfa-option-email');
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
     } else {
       console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');
