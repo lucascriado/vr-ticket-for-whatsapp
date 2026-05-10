@@ -99,9 +99,15 @@ async function getAccessToken() {
   try {
     await silentRenewal();
   } catch (err) {
-    if (!err.message.includes('interaction_required')) throw err;
+    const needsReauth =
+      err.message.includes('interaction_required') ||
+      err.message.includes('Silent renewal') ||
+      err.code === 'ERR_BAD_RESPONSE' ||
+      (err.response && err.response.status !== 302);
 
-    console.log('[TokenService] interaction_required — iniciando reauth automático...');
+    if (!needsReauth) throw err;
+
+    console.log(`[TokenService] Silent renewal inviável (${err.message}) — iniciando reauth automático...`);
     const { idToken, ssoCookie } = await reauth();
 
     const rawPayload = idToken.split('.')[1] ?? '';
