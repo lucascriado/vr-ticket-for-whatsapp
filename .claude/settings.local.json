@@ -4,7 +4,11 @@
       "Bash(Get-ChildItem -Recurse -Force)",
       "Read(//root/www/**)",
       "Bash(npm install *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(npm --version)"
     ]
   }
 }
