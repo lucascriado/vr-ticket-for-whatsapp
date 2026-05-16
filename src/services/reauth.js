@@ -5,7 +5,9 @@ const { getLastUid, fetchVerificationCode } = require('./gmail');
 
 const tmp = (name) => path.join(os.tmpdir(), name);
 
-const REDIRECT_URI = 'https://www.ticket.com.br/portal-usuario/meus-cartoes';
+// We use jwt.ms as redirect_uri so the B2C template's bot-check
+// (which blocks 'portal-usuario' URIs) never fires.
+const REDIRECT_URI = 'https://jwt.ms/';
 const B2C_TENANT = process.env.B2C_TENANT ?? '';
 const B2C_POLICY = process.env.B2C_POLICY ?? '';
 const CLIENT_ID = process.env.B2C_CLIENT_ID ?? '';
@@ -38,18 +40,18 @@ async function reauth() {
     await page.goto(`${AUTHORIZE_URL}?${params}`, { waitUntil: 'networkidle2' });
 
     // Preenche email no campo customizado do template
-    await page.waitForSelector('#login', { timeout: 15000 });
+    await page.waitForSelector('#login', { timeout: 20000 });
     await page.type('#login', process.env.TICKET_EMAIL ?? '');
 
     // Preenche senha (injetada pelo B2C no #api)
-    await page.waitForSelector('#password', { timeout: 15000 });
+    await page.waitForSelector('#password', { timeout: 20000 });
     await page.type('#password', process.env.TICKET_PASSWORD ?? '');
 
     // Clica no botão next (injetado pelo B2C)
     await page.waitForSelector('#next', { timeout: 10000 });
     await page.click('#next');
 
-    // Aguarda ou o botão de seleção de MFA (por texto) ou o campo de código direto
+    // Aguarda ou o botão de seleção de MFA ou o campo de código direto
     const lastUid = await getLastUid();
     const mfaOptionVisible = await Promise.race([
       page.waitForFunction(
@@ -68,7 +70,6 @@ async function reauth() {
         const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().includes('Por e-mail'));
         btn?.click();
       });
-      // aguarda a página processar o pedido de envio do código por e-mail
       await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
       await new Promise(r => setTimeout(r, 2000));
       console.log('[Reauth] MFA por e-mail solicitado, aguardando código no Gmail...');
@@ -76,25 +77,20 @@ async function reauth() {
       console.log('[Reauth] Campo de código já visível (MFA enviado automaticamente), aguardando código no Gmail...');
     }
 
-    // Aguarda o campo do código aparecer (se ainda não estiver visível)
     await page.waitForSelector('#VerificationCode', { timeout: 60000 }).catch(async (err) => {
       await page.screenshot({ path: tmp('reauth-verification.png'), fullPage: true });
       console.error('[Reauth] #VerificationCode não apareceu — screenshot em /tmp/reauth-verification.png');
       throw err;
     });
 
-    // Lê o código no Gmail buscando só emails chegados após o pedido de MFA
     const code = await fetchVerificationCode(lastUid);
     console.log(`[Reauth] Código recebido: ${code}`);
 
     await page.type('#VerificationCode', code);
 
-    // Clica em verificar código
     await page.waitForSelector('#signinEmailVerificationControl_but_verify_code', { timeout: 5000 });
     await page.click('#signinEmailVerificationControl_but_verify_code');
 
-    // Aguarda #continue ficar visível (após verificação bem-sucedida) e clica manualmente
-    // como fallback caso o skipSteps() do template não dispare em headless
     try {
       await page.waitForSelector('#continue:not(.d-none)', { timeout: 15000 });
       await page.evaluate(() => document.getElementById('continue').click());
@@ -102,14 +98,16 @@ async function reauth() {
       // skipSteps() já clicou ou o redirect aconteceu antes
     }
 
-    // Aguarda redirect para ticket.com.br com o token na URL
-    await page.waitForFunction(
-      (redirect) => window.location.href.startsWith(redirect),
+    // Aguarda redirect para jwt.ms com o token no fragment
+    const finalUrl = await page.waitForFunction(
+      () => {
+        const href = window.location.href;
+        if (href.startsWith('https://jwt.ms') && href.includes('id_token')) return href;
+        return false;
+      },
       { timeout: 30000 },
-      REDIRECT_URI,
-    );
+    ).then((handle) => handle.jsonValue());
 
-    const finalUrl = page.url();
     const fragment = finalUrl.split('#')[1] ?? '';
     idToken = new URLSearchParams(fragment).get('id_token');
 
