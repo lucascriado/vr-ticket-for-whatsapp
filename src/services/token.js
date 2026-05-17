@@ -17,17 +17,19 @@ const state = {
 
 function persistEnvKey(key, value) {
   try {
-    let content = fs.readFileSync(ENV_PATH, 'utf8');
+    let content = '';
+    try { content = fs.readFileSync(ENV_PATH, 'utf8'); } catch {}
     const regex = new RegExp(`^${key}=.*$`, 'm');
     if (regex.test(content)) {
       content = content.replace(regex, `${key}=${value}`);
     } else {
-      content += `\n${key}=${value}`;
+      content = content ? content.trimEnd() + `
+${key}=${value}
+` : `${key}=${value}
+`;
     }
     fs.writeFileSync(ENV_PATH, content, 'utf8');
-  } catch {
-    // .env não encontrado ou sem permissão — ignora silenciosamente
-  }
+  } catch {}
 }
 
 function init() {
